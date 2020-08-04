@@ -264,9 +264,13 @@ newline return an empty string."
   (let ((cwd (expand-file-name (file-truename default-directory))))
     (when (file-directory-p cwd)
       (let* ((default-directory (file-name-as-directory cwd))
+             (superdir (helm-git-grep-git-string
+                        "rev-parse" "--show-superproject-working-tree"))
              (cdup (helm-git-grep-git-string "rev-parse" "--show-cdup")))
-        (when cdup
-          (file-name-as-directory (expand-file-name cdup cwd)))))))
+        (cond
+         (superdir (file-name-as-directory superdir))
+         (cdup (file-name-as-directory (expand-file-name cdup cwd)))
+         )))))
 
 (defun helm-git-grep-showing-leading-and-trailing-lines-option (&optional strp)
   "Get num option or empty string if STRP is t."
