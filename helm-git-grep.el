@@ -57,13 +57,8 @@
   :group 'helm)
 
 (defcustom helm-git-grep-sources
-  '(helm-git-grep-source helm-git-grep-submodule-source)
-  "Default helm sources for `helm-git-grep'.
-
-If you don't want to search in submodules, \
-Set only `helm-git-grep-source' like this:
-
-    (setq helm-git-grep-sources '(helm-git-grep-source))"
+  '(helm-git-grep-source)
+  "Default helm sources for `helm-git-grep'."
   :group 'helm-git-grep
   :type '(repeat (choice symbol)))
 
@@ -295,31 +290,11 @@ newline return an empty string."
                   (split-string helm-pattern " +" t))))
          (helm-git-grep-pathspec-args))))
 
-(defun helm-git-grep-submodule-grep-command ()
-  "Create command of `helm-git-submodule-grep-process' in `helm-git-grep'."
-  (list "git" "--no-pager" "submodule" "--quiet" "foreach"
-       (format "git grep -n --no-color %s %s %s %s | sed s!^!$path/!"
-               (if helm-git-grep-ignore-case "-i" "")
-               (if helm-git-grep-wordgrep "-w" "")
-               (helm-git-grep-showing-leading-and-trailing-lines-option t)
-                (mapconcat (lambda (x)
-                             (format "-e %s " (shell-quote-argument x)))
-                           (split-string helm-pattern " +" t)
-                           "--and "))))
-
 (defun helm-git-grep-process ()
   "Retrieve candidates from result of git grep."
   (helm-aif (helm-attr 'base-directory)
       (let ((default-directory it))
         (apply 'start-process "git-grep-process" nil "git" (helm-git-grep-args))) '()))
-
-(defun helm-git-grep-submodule-grep-process ()
-  "Retrieve candidates from result of git grep submodules."
-  (helm-aif (helm-attr 'base-directory)
-      (let ((default-directory it))
-        (apply 'start-process "git-submodule-grep-process" nil
-               (helm-git-grep-submodule-grep-command)))
-    '()))
 
 (define-compilation-mode helm-git-grep-mode "Helm Git Grep"
   "Set up `wgrep' if exist."
@@ -692,10 +667,6 @@ You can save your results in a helm-git-grep-mode buffer, see below.
   (helm-make-source "Git Grep" 'helm-git-grep-class
     :candidates-process 'helm-git-grep-process))
 
-(defvar helm-git-grep-submodule-source
-  (helm-make-source "Git Submodule Grep" 'helm-git-grep-class
-    :candidates-process 'helm-git-grep-submodule-grep-process))
-
 (defun helm-git-grep-1 (&optional input)
   "Execute helm git grep.
 Optional argument INPUT is initial input."
@@ -765,12 +736,6 @@ if region exists.
 (make-obsolete
  'helm-git-grep-with-exclude-file-pattern
  helm-git-grep-with-exclude-file-pattern-obsolete-message "0.10.0")
-
-(define-obsolete-function-alias 'helm-git-submodule-grep-command
-  'helm-git-grep-submodule-grep-command "0.10.0")
-
-(define-obsolete-function-alias 'helm-git-submodule-grep-process
-  'helm-git-grep-submodule-grep-process "0.10.0")
 
 (define-obsolete-variable-alias 'helm-source-git-grep
   'helm-git-grep-source "0.10.0")
