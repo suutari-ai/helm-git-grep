@@ -89,6 +89,11 @@ Set it to nil if you don't want this limit."
   :group 'helm-git-grep
   :type  'boolean)
 
+(defcustom helm-git-grep-recurse-submodules t
+  "Recurse into submodules when matching."
+  :group 'helm-git-grep
+  :type  'boolean)
+
 (defcustom helm-git-grep-wordgrep nil
   "Wordgrep when matching."
   :group 'helm-git-grep
@@ -146,7 +151,7 @@ You can see the files matched by your pathspec with:
   :type '(repeat string  :tag "Pathspec"))
 
 (defcustom helm-git-grep-doc-order-in-name-header
-  '(pathspec basedir wordgrep ignorecase)
+  '(pathspec basedir wordgrep recursesubmodules ignorecase)
   "List of doc in name header for git-grep(1).
 list of following possible values:
     pathspec: if `helm-git-grep-pathspecs' is not nil, \
@@ -155,12 +160,15 @@ availability of `helm-git-grep-pathspecs' and key of toggle command.
 and key of toggle command.
     wordgrep: if `helm-git-grep-wordgrep' is t, show [w] \
 and key of toggle command.
+    recursesubmodules: if `helm-git-grep-recurse-submodules' is t, show [r] \
+and key of toggle command.
     ignorecase: if `helm-git-grep-ignore-case' is t, show [i] \
 and key of toggle command."
   :group 'helm-git-grep
   :type '(repeat (choice (const :tag "PathSpecs" pathspec)
                          (const :tag "BaseDirectory" basedir)
                          (const :tag "WordGrep" wordgrep)
+                         (const :tag "RecurseSubmodules" recursesubmodules)
                          (const :tag "IgnoreCase" ignorecase))))
 
 
@@ -215,6 +223,11 @@ and key of toggle command."
      "[helm-git-grep-toggle-wordgrep]:Tog.wordgrep%s"
      :function
      (lambda (doc) (format doc (if helm-git-grep-wordgrep "[w]" ""))))
+    recursesubmodules
+    (:doc
+     "[helm-git-grep-toggle-recurse-submodules]:Tog.recursesubmodules%s"
+     :function
+     (lambda (doc) (format doc (if helm-git-grep-recurse-submodules "[r]" ""))))
     ignorecase
     (:doc
      "[helm-git-grep-toggle-ignore-case]:Tog.ignorecase%s"
@@ -271,6 +284,7 @@ newline return an empty string."
   (delq nil
         (append
          (list "--no-pager" "grep" "--null" "-n" "--no-color"
+               (if helm-git-grep-recurse-submodules "--recurse-submodules" nil)
                (if helm-git-grep-ignore-case "-i" nil)
                (if helm-git-grep-wordgrep "-w" nil)
                (helm-git-grep-showing-leading-and-trailing-lines-option))
@@ -546,6 +560,13 @@ With a prefix arg record CANDIDATE in `mark-ring'."
   (helm-git-grep-rerun-with-input))
 (put 'helm-git-grep-toggle-wordgrep 'helm-only t)
 
+(defun helm-git-grep-toggle-recurse-submodules ()
+  "Toggle recursesubmodules option for git grep command from `helm-git-grep'."
+  (interactive)
+  (setq helm-git-grep-recurse-submodules (not helm-git-grep-recurse-submodules))
+  (helm-git-grep-rerun-with-input))
+(put 'helm-git-grep-toggle-recurse-submodules 'helm-only t)
+
 (defun helm-git-grep-toggle-showing-trailing-leading-line ()
   "Toggle show leading and trailing lines option for git grep."
   (interactive)
@@ -611,6 +632,7 @@ You can save your results in a helm-git-grep-mode buffer, see below.
 \\[helm-git-grep-pathspec-toggle-availability]\t\t->Toggle pathspec availability.
 \\[helm-git-grep-toggle-base-directory]\t\t->Toggle base directory for search.
 \\[helm-git-grep-toggle-ignore-case]\t\t->Toggle ignore case option.
+\\[helm-git-grep-toggle-recurse-submodules]\t\t->Toggle recurse submodules option.
 \\[helm-git-grep-toggle-wordgrep]\t\t->Toggle wordgrep option.
 \\[helm-git-grep-run-other-window-action]\t\t->Jump other window.
 \\[helm-git-grep-run-other-frame-action]\t\t->Jump other frame.
@@ -637,6 +659,7 @@ You can save your results in a helm-git-grep-mode buffer, see below.
     (define-key map (kbd "C-c p")    'helm-git-grep-pathspec-toggle-availability)
     (define-key map (kbd "C-c b")    'helm-git-grep-toggle-base-directory)
     (define-key map (kbd "C-c i")    'helm-git-grep-toggle-ignore-case)
+    (define-key map (kbd "C-c r")    'helm-git-grep-toggle-recurse-submodules)
     (define-key map (kbd "C-c w")    'helm-git-grep-toggle-wordgrep)
     (define-key map (kbd "C-c n")    'helm-git-grep-toggle-showing-trailing-leading-line)
     (define-key map (kbd "C-c o")    'helm-git-grep-run-other-window-action)
