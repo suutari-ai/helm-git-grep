@@ -389,12 +389,18 @@ WHERE can be one of `other-window', `other-frame'.
 if MARK is t, Set mark."
   (let* ((lineno (nth 0 candidate))
          (columnno (nth 1 candidate))
-         (fname (nth 3 candidate)))
+         (filename (nth 3 candidate))
+         (full-filename (expand-file-name
+                         filename
+                         (or (helm-interpret-value (helm-attr 'base-directory))
+                             (and (helm-candidate-buffer)
+                                  (buffer-local-value
+                                   'default-directory (helm-candidate-buffer)))))))
     (case where
-          (other-window (find-file-other-window fname))
-          (other-frame  (find-file-other-frame fname))
+          (other-window (find-file-other-window full-filename))
+          (other-frame  (find-file-other-frame full-filename))
           (grep         (helm-git-grep-save-results-1))
-          (t            (find-file fname)))
+          (t            (find-file full-filename)))
     (unless (or (eq where 'grep))
       (helm-goto-line lineno)
       (goto-char (+ (point) (1- columnno))))
@@ -475,12 +481,7 @@ if MARK is t, Set mark."
            (realvalue (list (string-to-number lineno)
                             (string-to-number columnno)
                             content
-                            (expand-file-name
-                             filename
-                             (or (helm-interpret-value (helm-attr 'base-directory))
-                                 (and (helm-candidate-buffer)
-                                      (buffer-local-value
-                                       'default-directory (helm-candidate-buffer))))))))
+                            filename)))
 
       (cons
        (helm-git-grep-real-to-display realvalue)
