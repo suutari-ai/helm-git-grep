@@ -460,15 +460,16 @@ Argument SOURCE is not used."
 
 (defun helm-git-grep-filtered-candidate-transformer-file-line-1 (candidate)
   "Transform CANDIDATE to `helm-git-grep-mode' format."
-  ; truncate any very long lines
-  (when (> (length candidate) (window-width))
-    (setq candidate (substring candidate 0 (window-width))))
-
   (when (string-match "^\\(.+\\)\x00\\([0-9]+\\)\x00\\([0-9]+\\)\x00\\(.*\\)$" candidate)
     (let ((filename (match-string 1 candidate))
           (lineno (match-string 2 candidate))
           (columnno (match-string 3 candidate))
           (content (match-string 4 candidate)))
+
+      ;; truncate any very long lines
+      (when (> (length content) (window-width))
+        (setq content (substring content 0 (window-width))))
+
       (cons (helm-git-grep-filtered-candidate-transformer-display
              filename lineno columnno content)
             (list (string-to-number lineno)
