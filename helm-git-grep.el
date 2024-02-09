@@ -466,14 +466,14 @@ if MARK is t, Set mark."
 (defun helm-git-grep-highlight-match (content)
   "Highlight matched text with `helm-git-grep-match' face in CONTENT."
   (dolist (input (delete "" (split-string helm-input)))
-    (if (string-match (format ".*\\(%s\\).*" input) content)
-        (put-text-property (match-beginning 1) (match-end 1)
+    (if (string-match input content)
+        (put-text-property (match-beginning 0) (match-end 0)
                            'face 'helm-git-grep-match content)))
   content)
 
 (defun helm-git-grep-candidate-transformer-1 (candidate)
   "Transform CANDIDATE to `helm-git-grep-mode' format."
-  (when (string-match "^\\(.+\\)\x00\\([0-9]+\\)\x00\\([0-9]+\\)\x00\\(.*\\)$" candidate)
+  (when (string-match "\\`\\([^\x00]+\\)\x00\\([0-9]+\\)\x00\\([0-9]+\\)\x00\\(.*\\)\\'" candidate)
     (let* ((filename (match-string 1 candidate))
            (lineno (match-string 2 candidate))
            (columnno (match-string 3 candidate))
