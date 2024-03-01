@@ -95,6 +95,11 @@ Set it to nil if you don't want this limit."
   :group 'helm-git-grep
   :type  'boolean)
 
+(defcustom helm-git-grep-quotes nil
+  "Parse quotes in search string."
+  :group 'helm-git-grep
+  :type  'boolean)
+
 (defcustom helm-git-grep-showing-leading-and-trailing-lines nil
   "Show leading and trailing lines."
   :group 'helm-git-grep
@@ -284,7 +289,9 @@ newline return an empty string."
           (apply 'append
                  (mapcar
                   (lambda (x) (list "-e" x "--and"))
-                  (split-string helm-pattern " +" t))))
+                  (if helm-git-grep-quotes
+                      (split-string-and-unquote helm-pattern " +")
+                    (split-string helm-pattern " +" t)))))
          (helm-git-grep-pathspec-args))))
 
 (defun helm-git-grep-submodule-grep-command ()
