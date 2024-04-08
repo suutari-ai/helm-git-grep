@@ -462,11 +462,12 @@ if MARK is t, Set mark."
                           (propertize filename 'face 'helm-git-grep-file)
                           (propertize (number-to-string lineno) 'face 'helm-git-grep-line)
                           (propertize (number-to-string columnno) 'face 'helm-git-grep-column)
-                          (helm-git-grep-highlight-match content))))
+                          (helm-git-grep-highlight-match content)))
+         (max-length (1- (window-width))))
 
     ;; truncate any very long lines
-    (when (> (length display) (window-width))
-      (setq display (substring display 0 (window-width))))
+    (when (> (length display) max-length)
+      (setq display (substring display 0 max-length)))
 
     (propertize display 'helm-realvalue candidate)))
 
