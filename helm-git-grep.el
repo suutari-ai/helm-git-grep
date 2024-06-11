@@ -95,6 +95,11 @@ Set it to nil if you don't want this limit."
   :group 'helm-git-grep
   :type  'boolean)
 
+(defcustom helm-git-grep-quotes nil
+  "Parse quotes in search string."
+  :group 'helm-git-grep
+  :type  'boolean)
+
 (defcustom helm-git-grep-showing-leading-and-trailing-lines nil
   "Show leading and trailing lines."
   :group 'helm-git-grep
@@ -188,7 +193,12 @@ and key of toggle command."
 
 (defface helm-git-grep-line
   '((default (:inherit compilation-line-number)))
-  "Face used to highlight git-grep(1) number lines."
+  "Face used to highlight git-grep(1) line numbers."
+  :group 'helm-git-grep-faces)
+
+(defface helm-git-grep-column
+  '((default (:inherit compilation-column-number)))
+  "Face used to highlight git-grep(1) column numbers."
   :group 'helm-git-grep-faces)
 
 
@@ -283,7 +293,7 @@ newline return an empty string."
   "Create arguments of `helm-git-grep-process' in `helm-git-grep'."
   (delq nil
         (append
-         (list "--no-pager" "grep" "--null" "-n" "--no-color"
+         (list "--no-pager" "grep" "--null" "--line-number" "--column" "--no-color"
                (if helm-git-grep-recurse-submodules "--recurse-submodules" nil)
                (if helm-git-grep-ignore-case "-i" nil)
                (if helm-git-grep-wordgrep "-w" nil)
@@ -292,7 +302,9 @@ newline return an empty string."
           (apply 'append
                  (mapcar
                   (lambda (x) (list "-e" x "--and"))
-                  (split-string helm-pattern " +" t))))
+                  (if helm-git-grep-quotes
+                      (split-string-and-unquote helm-pattern " +")
+                    (split-string helm-pattern " +" t)))))
          (helm-git-grep-pathspec-args))))
 
 (defun helm-git-grep-process ()
@@ -304,7 +316,30 @@ newline return an empty string."
 (define-compilation-mode helm-git-grep-mode "Helm Git Grep"
   "Set up `wgrep' if exist."
   (set (make-local-variable 'compilation-error-face) compilation-info-face)
-  (set (make-local-variable 'compilation-error-regexp-alist) grep-regexp-alist)
+  (set (make-local-variable 'compilation-error-regexp-alist)
+       (list
+        (list
+         ;; (rx
+         ;;  bol
+         ;;  ;; File name
+         ;;  (group-n 1
+         ;;           (opt (any "A-Za-z") ":") ; Allow "C:..." for w32.
+         ;;           (+?
+         ;;            (not (any "\n:")))
+         ;;           (not (any "\n/:")))
+         ;;  ":"
+         ;;  ;; Line number
+         ;;  (group-n 2
+         ;;           (any "1-9")
+         ;;           (zero-or-more (any "0-9")))
+         ;;  ":"
+         ;;  ;; Column number
+         ;;  (group-n 3
+         ;;           (any "1-9")
+         ;;           (zero-or-more (any "0-9")))
+         ;;  ":")
+         "^\\(?1:\\(?:[A-Za-z]:\\)?[^\n:]+?[^\n/:]\\):\\(?2:[1-9][0-9]*\\):\\(?3:[1-9][0-9]*\\):"
+         1 2 3)))
   (when (require 'wgrep nil t)
     (wgrep-setup-internal)))
 (put 'helm-git-grep-mode 'mode-class 'special)
@@ -340,6 +375,10 @@ newline return an empty string."
                     (buffer-substring (point) (point-max)))))
         (setq default-directory default-dir)
         (helm-git-grep-mode)
+        (setq-local compilation-directory default-dir)
+        (setq-local compile-command (combine-and-quote-strings
+                                     (cons "git" (remove "--null" (helm-git-grep-args)))))
+        (setq-local compilation-arguments (list compile-command 'helm-git-grep-mode))
         (pop-to-buffer buf)))
     (message "Helm Git Grep Results saved in `%s' buffer" buf)))
 
@@ -349,16 +388,22 @@ newline return an empty string."
 WHERE can be one of `other-window', `other-frame'.
 if MARK is t, Set mark."
   (let* ((lineno (nth 0 candidate))
-         (fname (or (with-current-buffer helm-buffer
-                      (get-text-property (point-at-bol) 'help-echo))
-                    (nth 2 candidate))))
+         (columnno (nth 1 candidate))
+         (filename (nth 3 candidate))
+         (full-filename (expand-file-name
+                         filename
+                         (or (helm-interpret-value (helm-attr 'base-directory))
+                             (and (helm-candidate-buffer)
+                                  (buffer-local-value
+                                   'default-directory (helm-candidate-buffer)))))))
     (case where
-      (other-window (find-file-other-window fname))
-      (other-frame  (find-file-other-frame fname))
-      (grep         (helm-git-grep-save-results-1))
-      (t            (find-file fname)))
+          (other-window (find-file-other-window full-filename))
+          (other-frame  (find-file-other-frame full-filename))
+          (grep         (helm-git-grep-save-results-1))
+          (t            (find-file full-filename)))
     (unless (or (eq where 'grep))
-      (helm-goto-line lineno))
+      (helm-goto-line lineno)
+      (goto-char (+ (point) (1- columnno))))
     (when mark
       (set-marker (mark-marker) (point))
       (push-mark (point) 'nomsg))
@@ -395,48 +440,53 @@ if MARK is t, Set mark."
      ("Find file other window" . helm-git-grep-other-window)))
   "Actions for `helm-git-grep'.")
 
-(defun helm-git-grep-filtered-candidate-transformer-file-line (candidates source)
-  "Transform CANDIDATES to `helm-git-grep-mode' format.
-
-Argument SOURCE is not used."
-  (delq nil (mapcar 'helm-git-grep-filtered-candidate-transformer-file-line-1
+(defun helm-git-grep-candidate-transformer (candidates)
+  "Transform CANDIDATES to `helm-git-grep-mode' format."
+  (delq nil (mapcar 'helm-git-grep-candidate-transformer-1
                     candidates)))
 
-(defun helm-git-grep-filtered-candidate-transformer-display
-    (filename lineno content)
-  "Propertize FILENAME LINENO CONTENT and concatenate them."
-  (format "%s:%s:%s"
-          (propertize filename 'face 'helm-git-grep-file)
-          (propertize lineno 'face 'helm-git-grep-line)
-          (helm-git-grep-highlight-match content)))
+(defun helm-git-grep-real-to-display (candidate)
+  "Propertize FILENAME LINENO COLUMNNO CONTENT and concatenate them."
+  (let* ((lineno (nth 0 candidate))
+         (columnno (nth 1 candidate))
+         (content (nth 2 candidate))
+         (filename (nth 3 candidate))
+         (display (format "%s:%s:%s:%s"
+                          (propertize filename 'face 'helm-git-grep-file)
+                          (propertize (number-to-string lineno) 'face 'helm-git-grep-line)
+                          (propertize (number-to-string columnno) 'face 'helm-git-grep-column)
+                          (helm-git-grep-highlight-match content)))
+         (max-length (1- (window-width))))
+
+    ;; truncate any very long lines
+    (when (> (length display) max-length)
+      (setq display (substring display 0 max-length)))
+
+    (propertize display 'helm-realvalue candidate)))
 
 (defun helm-git-grep-highlight-match (content)
   "Highlight matched text with `helm-git-grep-match' face in CONTENT."
   (dolist (input (delete "" (split-string helm-input)))
-    (if (string-match (format ".*\\(%s\\).*" input) content)
-        (put-text-property (match-beginning 1) (match-end 1)
+    (if (string-match input content)
+        (put-text-property (match-beginning 0) (match-end 0)
                            'face 'helm-git-grep-match content)))
   content)
 
-(defun helm-git-grep-filtered-candidate-transformer-file-line-1 (candidate)
+(defun helm-git-grep-candidate-transformer-1 (candidate)
   "Transform CANDIDATE to `helm-git-grep-mode' format."
-                                        ; truncate any very long lines
-  (when (> (length candidate) (window-width))
-    (setq candidate (substring candidate 0 (window-width))))
+  (when (string-match "\\`\\([^\x00]+\\)\x00\\([0-9]+\\)\x00\\([0-9]+\\)\x00\\(.*\\)\\'" candidate)
+    (let* ((filename (match-string 1 candidate))
+           (lineno (match-string 2 candidate))
+           (columnno (match-string 3 candidate))
+           (content (match-string 4 candidate))
+           (realvalue (list (string-to-number lineno)
+                            (string-to-number columnno)
+                            content
+                            filename)))
 
-  (when (string-match "^\\(.+\\)\x00\\([0-9]+\\)\x00\\(.*\\)$" candidate)
-    (let ((filename (match-string 1 candidate))
-          (lineno (match-string 2 candidate))
-          (content (match-string 3 candidate)))
-      (cons (helm-git-grep-filtered-candidate-transformer-display
-             filename lineno content)
-            (list (string-to-number lineno) content
-                  (expand-file-name
-                   filename
-                   (or (helm-interpret-value (helm-attr 'base-directory))
-                       (and (helm-candidate-buffer)
-                            (buffer-local-value
-                             'default-directory (helm-candidate-buffer))))))))))
+      (cons
+       (helm-git-grep-real-to-display realvalue)
+       realvalue))))
 
 (defun helm-git-grep-init ()
   "Initialize base-directory attribute for `helm-git-grep' sources."
@@ -658,8 +708,11 @@ You can save your results in a helm-git-grep-mode buffer, see below.
           (default-directory :initform nil)
           (requires-pattern :initform 2)
           (volatile :initform t)
-          (filtered-candidate-transformer
-           :initform helm-git-grep-filtered-candidate-transformer-file-line)
+          (match-dynamic :initform t)
+          (candidate-transformer
+           :initform helm-git-grep-candidate-transformer)
+          (real-to-display
+           :initform helm-git-grep-real-to-display)
           (action :initform ,helm-git-grep-actions)
           (history :initform ,'helm-git-grep-history)
           (persistent-action :initform helm-git-grep-persistent-action)
